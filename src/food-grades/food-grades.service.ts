@@ -1,9 +1,11 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { FoodGrade, FoodGradeType } from './entities/food-grade.entity';
 import { EntityManager, Repository, In } from 'typeorm';
 import { CreateFoodGradeDto } from './dto/create-food-grade.dto';
 import * as fuzzball from 'fuzzball';
+import * as fs from 'fs';
+import * as path from 'path';
 import { ExternalApiService } from 'src/external-api/external-api.service';
 import { UpdateFoodGradeDto } from './dto/update-food-grade.dto';
 import { FoodDataDto } from './dto/food-data.dto';
@@ -24,7 +26,7 @@ type ScoringLog = {
 };
 
 @Injectable()
-export class FoodGradesService {
+export class FoodGradesService implements OnModuleInit {
   logger = new Logger(FoodGradesService.name);
   constructor(
     @InjectRepository(FoodGrade)
@@ -32,6 +34,43 @@ export class FoodGradesService {
     private readonly api: ExternalApiService,
     private readonly entityManager: EntityManager,
   ) {}
+
+  async onModuleInit() {
+    await this.seedFoodGradesIfEmpty();
+  }
+
+  /**
+   * Seeds the food_grades table from src/food-grades/seeds/food-grades.sql
+   * the first time the table is created (or whenever it's found empty, e.g.
+   * after resetting the database) so the app isn't left with no reference
+   * data to match menus against.
+   */
+  private async seedFoodGradesIfEmpty() {
+    const existingCount = await this.foodGradesRepository.count();
+    if (existingCount > 0) {
+      return;
+    }
+
+    const seedPath = path.join(__dirname, 'seeds', 'food-grades.sql');
+    if (!fs.existsSync(seedPath)) {
+      this.logger.warn(`Food grades seed file not found at ${seedPath}`);
+      return;
+    }
+
+    const statements = fs
+      .readFileSync(seedPath, 'utf8')
+      .split(/;\s*\n/)
+      .map((statement) => statement.trim())
+      .filter(Boolean);
+
+    for (const statement of statements) {
+      await this.entityManager.query(statement);
+    }
+
+    this.logger.log(
+      `Seeded food_grades table from ${seedPath} (${statements.length} statement(s))`,
+    );
+  }
 
   async create(createFoodGradeDto: CreateFoodGradeDto) {
     this.logger.log('Creating food grade with data:', createFoodGradeDto);

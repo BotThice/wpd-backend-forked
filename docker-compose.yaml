@@ -6,7 +6,7 @@ services:
 
     # Redis configuration with security
     command: >
-      redis-server 
+      redis-server
       --requirepass ${REDIS_PASSWORD}
       --bind 0.0.0.0
       --maxmemory 256mb
@@ -27,6 +27,9 @@ services:
 
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+
+    networks:
+      - wpd-network
 
     # Resource limits
     deploy:
@@ -51,10 +54,162 @@ services:
         max-size: '10m'
         max-file: '3'
 
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-server
+    restart: unless-stopped
+
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      TZ: Asia/Bangkok
+
+    ports:
+      - '${MYSQL_PORT:-3306}:3306'
+
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+    networks:
+      - wpd-network
+
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'mysqladmin ping -h localhost -u root -p"$$MYSQL_ROOT_PASSWORD" --silent',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio-server
+    restart: unless-stopped
+
+    command: server /data --console-address ":9001"
+
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+
+    ports:
+      - '9000:9000' # API
+      - '9001:9001' # Web console
+
+    volumes:
+      - minio_data:/data
+
+    networks:
+      - wpd-network
+
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  # One-off job: creates the SPACE_NAME bucket in MinIO on startup, since a
+  # fresh MinIO container starts empty and the app never creates the bucket
+  # itself (uploads would fail with "NoSuchBucket" otherwise).
+  minio-init:
+    image: minio/mc:latest
+    container_name: minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - wpd-network
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} &&
+      mc mb --ignore-existing local/${SPACE_NAME} &&
+      mc anonymous set download local/${SPACE_NAME}
+      "
+    restart: 'no'
+
+  # The backend app itself. Not needed while running `npm run start:dev`
+  # locally against the containers above — start it with:
+  #   docker compose --profile app up -d --build
+  app:
+    build:
+      context: .
+    container_name: wpd-backend
+    restart: unless-stopped
+    profiles: ['app']
+
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+
+    environment:
+      NODE_ENV: production
+      PORT: 8000
+      FRONTEND_URL: ${FRONTEND_URL}
+      ADMIN_URL: ${ADMIN_URL}
+      BASE_URL: ${BASE_URL}
+
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+      JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_ID_SECRET: ${INTERNAL_ID_SECRET}
+
+      LINE_CLIENT_ID: ${LINE_CLIENT_ID}
+      CHANNEL_ACCESS_TOKEN: ${CHANNEL_ACCESS_TOKEN}
+      LINE_CHANNEL_SECRET: ${LINE_CHANNEL_SECRET}
+
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      SPACE_NAME: ${SPACE_NAME}
+
+    ports:
+      - '8000:8000'
+
+    networks:
+      - wpd-network
+
 networks:
   wpd-network:
     driver: bridge
 
 volumes:
   redis_data:
+    driver: local
+  mysql_data:
+    driver: local
+  minio_data:
     driver: local

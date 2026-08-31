@@ -1,5 +1,5 @@
 import { messagingApi } from '@line/bot-sdk';
-import { ImageQuickReply, CancleQuickReply } from '../quick-reply';
+import { ImageQuickReply } from '../quick-reply';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
