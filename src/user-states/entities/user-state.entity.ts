@@ -1,5 +1,7 @@
 import { MealType } from 'src/meals/entities/meal.entity';
 import { User } from 'src/users/entities/user.entity';
+import { FoodGradeType } from 'src/food-grades/entities/food-grade.entity';
+import { ScoringLog } from 'src/foods/entities/food.entity';
 import * as line from '@line/bot-sdk';
 import {
   Column,
@@ -47,7 +49,7 @@ export class UserState {
   geminiImageName: string;
 
   @Column({ type: 'json', nullable: true })
-  foodGradingInfo: string;
+  foodGradingInfo: FoodGradingInfo | null;
 
   @UpdateDateColumn()
   updatedAt: Date;
@@ -59,3 +61,17 @@ export class UserState {
     Object.assign(this, userState);
   }
 }
+
+export type FoodGradingInfo = {
+  lowestGrade: FoodGradeType;
+  maxScore: number;
+  avgGrade: FoodGradeType;
+  avgScore: number;
+  foods: Array<{
+    name: string;
+    grade: FoodGradeType;
+    description: string;
+    grading_by_ai: boolean;
+    scoring_log?: ScoringLog;
+  }>;
+};

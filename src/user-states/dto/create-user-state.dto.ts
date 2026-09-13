@@ -1,5 +1,6 @@
 import { MealType } from 'src/meals/entities/meal.entity';
 import { User } from 'src/users/entities/user.entity';
+import { FoodGradingInfo } from 'src/user-states/entities/user-state.entity';
 import * as line from '@line/bot-sdk';
 
 export class CreateUserStateDto {
@@ -14,4 +15,5 @@ export class CreateUserStateDto {
     | line.messagingApi.FlexMessage;
   lineUserId?: string;
   geminiImageName?: string;
+  foodGradingInfo?: FoodGradingInfo | null;
 }

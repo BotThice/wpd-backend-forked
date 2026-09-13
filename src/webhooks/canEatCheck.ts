@@ -3,7 +3,10 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { QueueEventsRegistryService } from 'src/queue-events/queue-events.service';
-import { UserState } from 'src/user-states/entities/user-state.entity';
+import {
+  UserState,
+  FoodGradingInfo,
+} from 'src/user-states/entities/user-state.entity';
 import { RecordCaseHandler } from './record-case';
 import { ExternalApiService } from 'src/external-api/external-api.service';
 import { FoodGradesService } from 'src/food-grades/food-grades.service';
@@ -17,14 +20,12 @@ import {
   MenuChoiceConfirmFlex,
 } from './flex/flex-menu-choice';
 import { MealsService } from 'src/meals/meals.service';
-import { FoodGradeType } from 'src/food-grades/entities/food-grade.entity';
 import { canEatCheckSummary, RecordOrNot } from './flex/flex-decideToEat';
 import { WhatMealFlex } from './flex/flex-what-meal';
 import { Meal, MealType } from 'src/meals/entities/meal.entity';
 import { ImagesService } from 'src/images/images.service';
 import { FoodsService } from 'src/foods/foods.service';
 import { GradeFlex } from './flex/flex-grade';
-import { ScoringLog } from 'src/foods/entities/food.entity';
 
 @Injectable()
 export class CanEatCheckHandler {
@@ -65,18 +66,7 @@ export class CanEatCheckHandler {
       countC: number;
       totalFood: number;
     },
-    askMenuInfo: {
-      lowestGrade: FoodGradeType;
-      maxScore: number;
-      avgGrade: FoodGradeType;
-      avgScore: number;
-      foods: Array<{
-        name: string;
-        grade: FoodGradeType;
-        description: string;
-        grading_by_ai: boolean;
-      }>;
-    },
+    askMenuInfo: FoodGradingInfo,
     menuLists: string[],
   ): { newScore: number; newGrade: string } {
     let newScore = 0;
@@ -181,18 +171,7 @@ export class CanEatCheckHandler {
       countC: number;
       totalFood: number;
     },
-    foodGradingInfo: {
-      lowestGrade: FoodGradeType;
-      maxScore: number;
-      avgGrade: FoodGradeType;
-      avgScore: number;
-      foods: Array<{
-        name: string;
-        grade: FoodGradeType;
-        description: string;
-        grading_by_ai: boolean;
-      }>;
-    },
+    foodGradingInfo: FoodGradingInfo,
     newGrade: string,
     newScore: number,
   ): line.messagingApi.FlexMessage {
@@ -498,7 +477,7 @@ export class CanEatCheckHandler {
               pendingFile: userState.pendingFile,
               geminiImageName: userState.geminiImageName,
               lineUserId: lineUserId,
-              foodGradingInfo: JSON.stringify(foodGradingInfo),
+              foodGradingInfo,
             },
           });
 
@@ -803,19 +782,7 @@ export class CanEatCheckHandler {
         );
 
         if (response) {
-          const jsonFoodInfo: {
-            lowestGrade: FoodGradeType;
-            maxScore: number;
-            avgGrade: FoodGradeType;
-            avgScore: number;
-            foods: Array<{
-              name: string;
-              grade: FoodGradeType;
-              description: string;
-              grading_by_ai: boolean;
-              scoring_log?: ScoringLog;
-            }>;
-          } = JSON.parse(foodInfo);
+          const jsonFoodInfo: FoodGradingInfo = foodInfo;
 
           // create meal and food here
           const filePath =
